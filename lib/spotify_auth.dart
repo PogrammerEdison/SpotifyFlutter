@@ -1,8 +1,10 @@
 import 'dart:convert';
 import 'dart:math';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_web_auth_2/flutter_web_auth_2.dart';
 import 'package:http/http.dart' as http;
 import 'package:crypto/crypto.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 //PKCE verifier
 String generateVerifier() {
@@ -21,12 +23,22 @@ String generateChallenge(String verifier) {
 //connect to spotify
 Future<String?> connectToSpotify() async {
   final clientId = "32d59d35e1474a2a83213d215d6887a1";
-  final redirectUri = "http://127.0.0.1:52998/#/connect-callback";
   final scopes =
       "playlist-read-private playlist-read-collaborative user-library-read user-modify-playback-state";
 
   final verifier = generateVerifier();
   final challenge = generateChallenge(verifier);
+
+  String redirectUri;
+
+  if (kIsWeb) {
+    // Web version
+    redirectUri = "http://127.0.0.1:52998/auth-callback";
+  } else {
+    // Mobile version
+    redirectUri = "myapp://auth-callback";
+  }
+
 
   final authUrl =
       "https://accounts.spotify.com/authorize"
@@ -37,20 +49,30 @@ Future<String?> connectToSpotify() async {
       "&code_challenge=$challenge"
       "&scope=$scopes";
 
-  final result = await FlutterWebAuth2.authenticate(
-    url: authUrl,
-    callbackUrlScheme: "http",
-  );
+  String? code;
 
-  final code = Uri.parse(
-    result,
-  ).queryParameters['code']; //authorization token is generated based on challenge
-  if (code == null) return null;
+  if (kIsWeb){
+    await launchUrl(Uri.parse(authUrl), webOnlyWindowName: "_self");
+    final uri = Uri.base;
+    code = uri.queryParameters["code"];
+    if (code == null) return null;
+  }
 
-  //send authorization token with verifier to prove verifier owns challenge
+  if (!kIsWeb) {
+    final result = await FlutterWebAuth2.authenticate(
+      url: authUrl,
+      callbackUrlScheme: "myapp",
+    );
+
+    code = Uri.parse(result).queryParameters['code'];
+    if (code == null) return null;
+  }
+
   final response = await http.post(
     Uri.parse("https://accounts.spotify.com/api/token"),
-    headers: {"Content-Type": "application/x-www-form-urlencoded"},
+    headers: {
+      "Content-Type": "application/x-www-form-urlencoded",
+    },
     body: {
       "client_id": clientId,
       "grant_type": "authorization_code",
@@ -60,6 +82,5 @@ Future<String?> connectToSpotify() async {
     },
   );
 
-  final jsonResponse = jsonDecode(response.body);
-  return jsonResponse["access_token"];
+  return jsonDecode(response.body)["access_token"];
 }

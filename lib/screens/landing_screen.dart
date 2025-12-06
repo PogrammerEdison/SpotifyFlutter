@@ -317,7 +317,7 @@ class _LandingPageState extends State<LandingPage>
                         width: 220,
                         child: InkWell(
                           onTap: () {
-                            Navigator.pushNamed(context, '/connect-callback');
+                            Navigator.pushNamed(context, '/auth-callback');
                           },
                           borderRadius: BorderRadius.circular(12),
                           child: Container(
